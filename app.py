@@ -107,6 +107,10 @@ def get_demo_video_path(label):
 def home():
     return render_template("index.html")
 
+@app.route("/vrm-live")
+def vrm_live():
+    return render_template("vrm-live.html")
+
 @app.route('/auto')
 def auto_recognition():
     return render_template('auto.html')
