@@ -22,19 +22,39 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
 # ======================================================
 # Model setup
 # ======================================================
-MODEL_PATH = resource_path("run24.pth")
+MODEL_PATH = resource_path("run35.pth")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 CLASSES = [
-    'Color_Black', 'Color_Blue', 'Color_Brown', 'Color_Dark', 'Color_Gray',
-    'Color_Green', 'Color_Light', 'Color_Orange', 'Color_Pink', 'Color_Red',
-    'Color_Violet', 'Color_White', 'Color_Yellow',
-    'Family_Auntie', 'Family_Cousin', 'Family_Daughter', 'Family_Father',
-    'Family_Grandfather', 'Family_Grandmother', 'Family_Mother', 'Family_Parents',
-    'Family_Son', 'Family_Uncle',
-    'Numbers_Eight', 'Numbers_Five', 'Numbers_Four', 'Numbers_Nine',
-    'Numbers_One', 'Numbers_Seven', 'Numbers_Six', 'Numbers_Ten',
-    'Numbers_Three', 'Numbers_Two'
+    "Color_Black",
+    "Color_Blue",
+    "Color_Green",
+    "Color_Orange",
+    "Color_Pink",
+    "Color_Red",
+    "Color_White",
+    "Color_Yellow",
+    "Family_Daughter",
+    "Family_Father",
+    "Family_Grandfather",
+    "Family_Grandmother",
+    "Family_Mother",
+    "Family_Son",
+    "Numbers_Five",
+    "Numbers_Four",
+    "Numbers_One",
+    "Numbers_Three",
+    "Numbers_Two",
+    "Relationship_Boy",
+    "Relationship_Girl",
+    "Relationship_Man",
+    "Relationship_Woman",
+    "Survival_Correct",
+    "Survival_Don'tUnderstand",
+    "Survival_No",
+    "Survival_Understand",
+    "Survival_Wrong",
+    "Survival_Yes",
 ]
 
 INPUT_SIZE = 188
