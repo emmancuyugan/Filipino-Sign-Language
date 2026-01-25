@@ -104,7 +104,7 @@ def get_demo_video_path(label):
         return None
 
     category = parts[0].lower()
-    name = parts[1].lower()
+    name = parts[1].lower().replace("'", "")
 
     folder_abs = resource_path(os.path.join("static", "video", category))
     if not os.path.exists(folder_abs):
