@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>{% block title %}FSL Learning - Filipino Sign Language AI{% endblock %}</title>
+  <title>{% block title %}Senyasalin - Filipino Sign Language AI{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="AI-powered Filipino Sign Language learning platform with real-time gesture recognition and interactive feedback" />
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -205,7 +205,7 @@
     .footer {
       background: linear-gradient(135deg, var(--deep-blue), var(--lavender));
       color: var(--white);
-      padding: 40px 0 20px;
+      padding: 24px 0;
       margin-top: 60px;
       animation: fadeIn 0.8s ease-out;
     }
@@ -215,61 +215,12 @@
       to { opacity: 1; }
     }
 
-    .footer h4 {
-      font-size: 20px;
-      font-weight: 900;
-      margin-bottom: 12px;
-      color: var(--white);
-    }
-
-    .footer p {
-      color: rgba(255, 255, 255, 0.9);
-      font-size: 14px;
-    }
-
-    .footer .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 40px;
-      margin-bottom: 40px;
-    }
-
-    .footer .text-center {
-      text-align: center;
-    }
-
-    .footer-links {
-      display: flex;
-      justify-content: center;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .footer-links a {
-      padding: 8px 16px;
-      background: rgba(255, 255, 255, 0.2);
-      color: var(--white);
-      text-decoration: none;
-      border-radius: 10px;
-      font-size: 14px;
-      font-weight: 700;
-      transition: all 0.3s ease;
-    }
-
-    .footer-links a:hover {
-      background: rgba(255, 255, 255, 0.3);
-      transform: translateY(-3px);
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    }
-
     .footer-bottom {
       text-align: center;
-      margin-top: 32px;
-      padding-top: 32px;
-      border-top: 2px solid rgba(255, 255, 255, 0.2);
-      color: rgba(255, 255, 255, 0.9);
+      color: rgba(255, 255, 255, 0.95);
       font-size: 14px;
-      font-weight: 600;
+      font-weight: 700;
+      letter-spacing: 0.2px;
     }
 
     /* Responsive Design */
@@ -283,11 +234,6 @@
       nav {
         width: 100%;
         justify-content: flex-start;
-      }
-
-      .footer .grid {
-        grid-template-columns: 1fr;
-        gap: 30px;
       }
     }
 
@@ -306,11 +252,7 @@
       }
 
       .footer {
-        padding: 30px 0 16px;
-      }
-
-      .footer h4 {
-        font-size: 18px;
+        padding: 18px 0;
       }
     }
 
@@ -323,19 +265,17 @@
     .flex {
       display: flex;
     }
-  
+
     /* =============================
        Performance + Touch Optimizations
        (Keeps same look/layout, removes expensive effects on touch & during camera)
        ============================= */
 
-    /* Touchscreen / no-hover: disable hover "lift" + shimmer effects (desktop app touch use-case) */
     @media (hover: none), (pointer: coarse) {
       nav a::before { display: none !important; }
       nav a:hover { transform: none !important; box-shadow: none !important; }
       nav a:hover::before { left: -100% !important; }
 
-      /* Common button hover lifts */
       .big-button:hover,
       .start-button:hover,
       .assist-btn:hover,
@@ -350,16 +290,13 @@
       }
     }
 
-    /* Reduce motion for accessibility and for low-power devices */
     @media (prefers-reduced-motion: reduce) {
       * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
     }
 
-    /* Camera running mode: keep layout/scale, but drop expensive background animations/transitions */
     body.camera-running .bg-shapes { display: none !important; }
     body.camera-running * { animation: none !important; transition: none !important; }
 
-    /* Backdrop blur is expensive during realtime camera work */
     body.camera-running .difficulty-selector,
     body.camera-running .settings-panel,
     body.camera-running .result-overlay,
@@ -367,35 +304,43 @@
     body.camera-running .ghost-controls {
       backdrop-filter: none !important;
     }
-
   </style>
 </head>
-<body>
 
+<body>
   <header class="navbar">
     <div class="container nav-inner">
       <div class="brand">
         <a href="{{ url_for('home') }}" class="brand-link">
           <div class="brand-logo">
-            <img src="{{ url_for('static', filename='img/logo4.png') }}" alt="FSL Learning Logo">
+            <img src="{{ url_for('static', filename='img/logo5.png') }}" alt="Senyasalin Logo">
           </div>
           <div>
-            <div class="brand-title">FSL Learning</div>
-            <div class="tagline">AI-Powered Sign Language Education</div>
+            <div class="brand-title">Senyasalin</div>
+            <div class="tagline">An Offline Filipino Sign Language Recognition System</div>
           </div>
         </a>
       </div>
 
       <nav class="flex">
         <a href="{{ url_for('home') }}" class="{% if request.endpoint == 'home' %}active{% endif %}">HOME</a>
-        {% if session.get('authenticated') %}
+
+        {% if session.get('user_id') %}
           <a href="{{ url_for('tutor') }}" class="{% if request.endpoint == 'tutor' %}active{% endif %}">LEARN</a>
           <a href="{{ url_for('select') }}" class="{% if request.endpoint == 'select' %}active{% endif %}">SELECT</a>
           <a href="{{ url_for('activity') }}" class="{% if request.endpoint == 'activity' %}active{% endif %}">ACTIVITY</a>
           <a href="{{ url_for('auto_recognition') }}" class="{% if request.endpoint == 'auto_recognition' %}active{% endif %}">AUTO</a>
           <a href="{{ url_for('results') }}" class="{% if request.endpoint == 'results' %}active{% endif %}">RESULTS</a>
         {% endif %}
+
         <a href="{{ url_for('about') }}" class="{% if request.endpoint == 'about' %}active{% endif %}">ABOUT</a>
+
+        {% if session.get('user_id') %}
+          <a href="{{ url_for('logout') }}">LOGOUT{% if session.get('username') %} ({{ session.get('username') }}){% endif %}</a>
+        {% else %}
+          <a href="{{ url_for('login') }}" class="{% if request.endpoint == 'login' %}active{% endif %}">LOGIN</a>
+          <a href="{{ url_for('signup') }}" class="{% if request.endpoint == 'signup' %}active{% endif %}">SIGN UP</a>
+        {% endif %}
       </nav>
     </div>
   </header>
@@ -406,28 +351,8 @@
 
   <footer class="footer">
     <div class="container">
-      <div class="grid">
-        <div class="text-center">
-          <h4>FSL Learning</h4>
-          <p>Filipino Sign Language Education</p>
-        </div>
-        <div class="text-center">
-          <h4>Quick Links [Link]</h4>
-          <div class="footer-links">
-            <a href="{{ url_for('home') }}">Home</a>
-            {% if session.get('authenticated') %}
-              <a href="{{ url_for('tutor') }}">Learn</a>
-              <a href="{{ url_for('select') }}"> Select</a>
-              <a href="{{ url_for('activity') }}">Activity</a>
-              <a href="{{ url_for('auto_recognition') }}"> Auto</a>
-              <a href="{{ url_for('results') }}">Results</a>
-            {% endif %}
-            <a href="{{ url_for('about') }}"> About</a>
-          </div>
-        </div>
-      </div>
       <div class="footer-bottom">
-        <div>© <span id="year"></span> FSL Learning • TEAM 13 ★</div>
+        © <span id="year"></span> Senyasalin
       </div>
     </div>
   </footer>

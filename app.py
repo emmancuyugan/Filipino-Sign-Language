@@ -1,12 +1,20 @@
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, flash
 from flask_cors import CORS
+from dotenv import load_dotenv
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func
+
 import torch
 import torch.nn as nn
 import numpy as np
 import os
 import random
+import json
+import datetime
+
 from model import ModifiedLSTM
-from pathutils import resource_path 
+from pathutils import resource_path
 
 # ======================================================
 # Flask setup
@@ -17,7 +25,71 @@ app = Flask(
     template_folder=resource_path("templates"),
     static_folder=resource_path("static"),
 )
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret")
+
+# Optional (kept) – if you need CORS later
+CORS(app)
+
+# ======================================================
+# Environment + DB setup (offline/local)
+# ======================================================
+load_dotenv()
+app.secret_key = os.getenv("SECRET_KEY", "dev-secret")
+
+app.config["SQLALCHEMY_DATABASE_URI"] = os.getenv("DATABASE_URL")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db = SQLAlchemy(app)
+
+# ======================================================
+# Database models
+# ======================================================
+class User(db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+
+    results = db.relationship("PracticeResult", backref="user", lazy=True)
+
+
+class PracticeResult(db.Model):
+    __tablename__ = "practice_results"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    label = db.Column(db.String(120), nullable=False)
+    confidence = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, server_default=db.func.now(), nullable=False)
+
+
+def init_db():
+    """Create tables if they don't exist (safe to call repeatedly)."""
+    with app.app_context():
+        db.create_all()
+
+
+def login_required(fn):
+    from functools import wraps
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        return fn(*args, **kwargs)
+    return wrapper
+
+
+def save_progress(label: str, confidence=None):
+    """Save a practice result to PostgreSQL if the user is logged in."""
+    uid = session.get("user_id")
+    if not uid:
+        return
+    row = PracticeResult(
+        user_id=uid,
+        label=label,
+        confidence=float(confidence) if isinstance(confidence, (int, float)) else None,
+    )
+    db.session.add(row)
+    db.session.commit()
 
 # ======================================================
 # Model setup
@@ -116,8 +188,6 @@ def get_demo_video_path(label):
         return None
 
     chosen = random.choice(candidates)
-
-    # Return a URL path (Flask static), not a filesystem path
     return f"static/video/{category}/{chosen}"
 
 # ======================================================
@@ -132,6 +202,7 @@ def vrm_live():
     return render_template("vrm-live.html")
 
 @app.route('/auto')
+@login_required
 def auto_recognition():
     return render_template('auto.html')
 
@@ -140,6 +211,7 @@ def about():
     return render_template("about.html")
 
 @app.route('/activity')
+@login_required
 def activity():
     return render_template("activity.html")
 
@@ -148,38 +220,157 @@ def detect():
     return render_template("detect.html")
 
 @app.route('/results')
+@login_required
 def results():
-    return render_template("results.html")
+    # Latest individual rows (for the detailed list/table)
+    rows = (PracticeResult.query
+            .filter_by(user_id=session['user_id'])
+            .order_by(PracticeResult.created_at.desc())
+            .limit(500)
+            .all())
+
+    results_data = [
+        {
+            "label": r.label,
+            "confidence": r.confidence,
+            "created_at": r.created_at.isoformat() if r.created_at else None
+        }
+        for r in rows
+    ]
+
+    # ---- Daily summaries ----
+    daily = (db.session.query(
+                func.date(PracticeResult.created_at).label("day"),
+                func.count(PracticeResult.id).label("count")
+            )
+            .filter(PracticeResult.user_id == session["user_id"])
+            .group_by(func.date(PracticeResult.created_at))
+            .order_by(func.date(PracticeResult.created_at).desc())
+            .all())
+
+    daily_counts = [{"day": d.day.isoformat() if d.day else None, "count": int(d.count)} for d in daily]
+
+    top = (db.session.query(PracticeResult.label, func.count(PracticeResult.id).label("c"))
+           .filter(PracticeResult.user_id == session["user_id"])
+           .group_by(PracticeResult.label)
+           .order_by(func.count(PracticeResult.id).desc())
+           .first())
+    most_common = {"label": top[0], "count": int(top[1])} if top else None
+
+    today = datetime.date.today()
+    week_start = today - datetime.timedelta(days=6)
+
+    week_count = (db.session.query(func.count(PracticeResult.id))
+                  .filter(PracticeResult.user_id == session["user_id"])
+                  .filter(PracticeResult.created_at >= week_start)
+                  .scalar()) or 0
+
+    today_count = (db.session.query(func.count(PracticeResult.id))
+                   .filter(PracticeResult.user_id == session["user_id"])
+                   .filter(func.date(PracticeResult.created_at) == today)
+                   .scalar()) or 0
+
+    days_with_activity = {datetime.date.fromisoformat(x["day"]) for x in daily_counts if x["day"]}
+    streak = 0
+    cursor = today
+    while cursor in days_with_activity:
+        streak += 1
+        cursor -= datetime.timedelta(days=1)
+
+    summary = {
+        "today": int(today_count),
+        "last_7_days": int(week_count),
+        "streak_days": int(streak),
+        "most_common": most_common,
+    }
+
+    return render_template(
+        "results.html",
+        db_results_json=json.dumps(results_data),
+        results=results_data,
+        summary=summary,
+        daily_counts=daily_counts,
+    )
 
 @app.route('/tutor')
+@login_required
 def tutor():
     return render_template("tutor.html")
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
+    if request.method == 'POST':
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
+        confirm = request.form.get('confirm_password') or ''
+
+        if not username or not password:
+            flash("Please enter a username and password.", "danger")
+            return redirect(url_for('signup'))
+
+        if confirm and password != confirm:
+            flash("Passwords do not match.", "danger")
+            return redirect(url_for('signup'))
+
+        if User.query.filter_by(username=username).first():
+            flash("Username already exists. Please choose another.", "warning")
+            return redirect(url_for('signup'))
+
+        user = User(username=username, password_hash=generate_password_hash(password))
+        db.session.add(user)
+        db.session.commit()
+
+        flash("Account created! Please log in.", "success")
+        return redirect(url_for('login'))
+
     return render_template("signup.html")
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        session['authenticated'] = True
-        flash("Logged in successfully!", "success")
-        return redirect(url_for('home'))
+        username = (request.form.get('username') or '').strip()
+        password = request.form.get('password') or ''
+
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password_hash, password):
+            session.clear()
+            session['user_id'] = user.id
+            session['username'] = user.username
+            flash("Logged in successfully!", "success")
+            return redirect(url_for('select'))
+
+        flash("Invalid username or password.", "danger")
+        return redirect(url_for('login'))
+
     return render_template("login.html")
 
 @app.route('/select')
+@login_required
 def select():
     return render_template("select.html")
 
 @app.route('/logout')
 def logout():
-    session.pop('authenticated', None)
-    flash("Logged out successfully!", "info")
-    return redirect(url_for('home'))
+    session.clear()
+    flash("Logged out successfully.", "info")
+    return redirect(url_for('login'))
 
 # ======================================================
 # API Routes (backend logic)
 # ======================================================
+@app.route("/api/save_result", methods=["POST"])
+@login_required
+def api_save_result():
+    data = request.get_json(silent=True) or {}
+    label = (data.get("label") or "").strip()
+    confidence = data.get("confidence", None)
+
+    if not label:
+        return jsonify({"error": "Missing label"}), 400
+
+    save_progress(label, confidence)
+    return jsonify({"status": "ok"})
+
 @app.route("/ping", methods=["GET"])
 def ping():
     return jsonify({"message": "Backend is reachable ✅"})
@@ -204,13 +395,16 @@ def predict():
             pred_idx = int(np.argmax(probs))
             label = CLASSES[pred_idx]
 
+        conf = float(np.max(probs))
+        save_progress(label, conf)
+
         demo_path = get_demo_video_path(label)
         response = {
             "prediction": label,
-            "confidence": float(np.max(probs)),
+            "confidence": conf,
             "demo": demo_path or f"No demo found for {label}"
         }
-        print(f"[PREDICT] {label} (conf={np.max(probs):.4f}) → {demo_path}")
+        print(f"[PREDICT] {label} (conf={conf:.4f}) → {demo_path}")
         return jsonify(response)
 
     except Exception as e:
@@ -225,7 +419,6 @@ def predict_auto():
     try:
         data = request.get_json(force=True)
 
-        # Prepare input sequence (same as Activity)
         if "sequence" in data:
             x = prepare_sequence({"sequence": data["sequence"]})
         elif "features" in data:
@@ -233,7 +426,6 @@ def predict_auto():
         else:
             raise ValueError("Missing 'sequence' or 'features'")
 
-        # Inference
         with torch.no_grad():
             logits = model(x)
             probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
@@ -241,14 +433,15 @@ def predict_auto():
             pred_idx = int(np.argmax(probs))
             label = CLASSES[pred_idx]
 
-        # ✅ Confidence threshold check
         THRESHOLD = 0.8
         if conf < THRESHOLD:
-            # Sort all probabilities to find the top-3 closest signs
             sorted_indices = np.argsort(probs)[::-1]
             top_idx = sorted_indices[0]
             closest_label = CLASSES[top_idx]
             closest_conf = float(probs[top_idx])
+
+            # Save "closest" (what the model thinks you performed)
+            save_progress(closest_label, closest_conf)
 
             response = {
                 "prediction": "Incorrect",
@@ -259,6 +452,9 @@ def predict_auto():
             }
             print(f"[AUTO] Incorrect (conf={conf:.4f}) → Closest: {closest_label} ({closest_conf:.4f})")
         else:
+            # Save correct sign
+            save_progress(label, conf)
+
             response = {
                 "prediction": label,
                 "confidence": conf,
@@ -273,7 +469,7 @@ def predict_auto():
         return jsonify({"error": f"Auto Prediction failed: {str(e)}"}), 400
 
 # --------------------------
-# /api/assess (unchanged)
+# /api/assess
 # --------------------------
 @app.route("/api/assess", methods=["POST"])
 def assess():
@@ -285,6 +481,8 @@ def assess():
             probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
             pred_idx = int(np.argmax(probs))
             label = CLASSES[pred_idx]
+
+        save_progress(label, float(np.max(probs)))
 
         demo_path = get_demo_video_path(label)
         return jsonify({
@@ -300,4 +498,5 @@ def assess():
 # Run app
 # ======================================================
 if __name__ == "__main__":
+    init_db()
     app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)

@@ -647,6 +647,7 @@
 </div>
 
 <script src="{{ url_for('static', filename='mediapipe/camera_utils/camera_utils.js') }}"></script>
+<script src="{{ url_for('static', filename='mediapipe/drawing_utils/drawing_utils.js') }}"></script>
 <script src="{{ url_for('static', filename='mediapipe/holistic/holistic.js') }}"></script>
 
 <script>
@@ -674,6 +675,7 @@
   const ghostBadge=document.getElementById('ghostBadge');
 
   const PREDICT_URL=location.origin+'/predict_auto';
+  const SAVE_URL=location.origin+'/api/save_result';
   const SEQ_LEN=48;
   let buf=[],running=false,handsPresent=false,frameCount=0,showVisuals=true,showTimer=true,showResults=true;
   let predictInterval=null,tickInterval=null,countdown=5;
